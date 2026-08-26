@@ -167,8 +167,42 @@ class OfferStorage:
              currency, availability, now),
         )
 
+        # Section 22: "notify me when below X" - check against the best current
+        # price across ALL of the product's merchants (not just this offer),
+        # since a different, already-cheaper listing can also satisfy an alert.
+        best_row = conn.execute(
+            "SELECT MIN(total_price) AS best FROM offers WHERE product_id = %s AND availability != 'OUT_OF_STOCK'",
+            (product_id,),
+        ).fetchone()
+        best_total_price = best_row["best"] if best_row and best_row["best"] is not None else total_price
+        fired_alerts = self.check_and_trigger_alerts(conn, product_id=product_id,
+                                                       current_total_price=best_total_price)
+
         conn.commit()
-        return {"offer_id": offer_id, "total_price": total_price, "needs_verification": needs_verification}
+        return {"offer_id": offer_id, "total_price": total_price, "needs_verification": needs_verification,
+                "fired_alerts": fired_alerts}
+
+    def check_and_trigger_alerts(self, conn: psycopg.Connection, *, product_id: str,
+                                  current_total_price: Decimal) -> list[dict]:
+        """Section 22: finds active, not-yet-triggered alerts whose target price has
+        been reached, marks them triggered, and returns them so the caller can hand
+        off to a notification channel (email/push delivery is intentionally not
+        implemented here - this only decides *which* alerts fire, not how they're sent)."""
+        rows = conn.execute(
+            """SELECT id, user_id, target_price FROM price_alerts
+                   WHERE product_id = %s AND active = true AND triggered_at IS NULL
+                     AND target_price >= %s""",
+            (product_id, current_total_price),
+        ).fetchall()
+        fired = []
+        for r in rows:
+            conn.execute(
+                "UPDATE price_alerts SET triggered_at = now(), active = false WHERE id = %s",
+                (r["id"],),
+            )
+            fired.append({"alert_id": str(r["id"]), "user_id": str(r["user_id"]),
+                          "target_price": r["target_price"]})
+        return fired
 
     # ------------------------------------------------------------------
     # Product matching (spec section 15) - resolves a RawOffer to an

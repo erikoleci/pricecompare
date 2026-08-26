@@ -83,24 +83,27 @@ def conn():
 
 def test_same_ean_from_two_merchants_links_to_one_product(conn):
     storage = OfferStorage(StorageConfig(dsn=DSN))
-    brand_id = _make_brand(conn, "TestBrand-EAN")
-    category_id = _make_category(conn, "TestCategory-EAN")
+    brand_name = f"TestBrand-EAN-{uuid.uuid4().hex[:8]}"
+    brand_id = _make_brand(conn, brand_name)
+    category_id = _make_category(conn, f"TestCategory-EAN-{uuid.uuid4().hex[:8]}")
     ean = "0" + uuid.uuid4().hex[:12]
 
-    merchant_a = _make_merchant(conn, "merchant-a-ean.example")
-    merchant_b = _make_merchant(conn, "merchant-b-ean.example")
+    domain_a = f"merchant-a-ean-{uuid.uuid4().hex[:8]}.example"
+    domain_b = f"merchant-b-ean-{uuid.uuid4().hex[:8]}.example"
+    merchant_a = _make_merchant(conn, domain_a)
+    merchant_b = _make_merchant(conn, domain_b)
 
     offer_a = RawOffer(
-        merchant_domain="merchant-a-ean.example", merchant_product_id="A-1",
-        title="Apple iPhone 17 Pro 256GB Black", url="https://merchant-a-ean.example/p/1",
-        price=Decimal("899.00"), currency="EUR", brand="TestBrand-EAN", model="iPhone 17 Pro",
-        ean=ean, source_url="https://merchant-a-ean.example/p/1",
+        merchant_domain=domain_a, merchant_product_id="A-1",
+        title="Apple iPhone 17 Pro 256GB Black", url=f"https://{domain_a}/p/1",
+        price=Decimal("899.00"), currency="EUR", brand=brand_name, model="iPhone 17 Pro",
+        ean=ean, source_url=f"https://{domain_a}/p/1",
     )
     offer_b = RawOffer(
-        merchant_domain="merchant-b-ean.example", merchant_product_id="B-1",
-        title="iPhone 17 Pro 256 GB Black", url="https://merchant-b-ean.example/p/1",
-        price=Decimal("879.00"), currency="EUR", brand="TestBrand-EAN", model="iPhone 17 Pro",
-        ean=ean, source_url="https://merchant-b-ean.example/p/1",
+        merchant_domain=domain_b, merchant_product_id="B-1",
+        title="iPhone 17 Pro 256 GB Black", url=f"https://{domain_b}/p/1",
+        price=Decimal("879.00"), currency="EUR", brand=brand_name, model="iPhone 17 Pro",
+        ean=ean, source_url=f"https://{domain_b}/p/1",
     )
 
     result_a = storage.process_raw_offer(conn, merchant_id=merchant_a, raw=offer_a,
@@ -116,21 +119,22 @@ def test_same_ean_from_two_merchants_links_to_one_product(conn):
 
 def test_different_brand_model_creates_separate_products(conn):
     storage = OfferStorage(StorageConfig(dsn=DSN))
-    brand_id = _make_brand(conn, "TestBrand-DIFF")
-    category_id = _make_category(conn, "TestCategory-DIFF")
-    merchant_id = _make_merchant(conn, "merchant-diff.example")
+    brand_id = _make_brand(conn, f"TestBrand-DIFF-{uuid.uuid4().hex[:8]}")
+    category_id = _make_category(conn, f"TestCategory-DIFF-{uuid.uuid4().hex[:8]}")
+    domain = f"merchant-diff-{uuid.uuid4().hex[:8]}.example"
+    merchant_id = _make_merchant(conn, domain)
 
     offer_1 = RawOffer(
-        merchant_domain="merchant-diff.example", merchant_product_id="D-1",
-        title="Samsung Galaxy S26 Ultra 512GB", url="https://merchant-diff.example/p/1",
+        merchant_domain=domain, merchant_product_id="D-1",
+        title="Samsung Galaxy S26 Ultra 512GB", url=f"https://{domain}/p/1",
         price=Decimal("1199.00"), currency="EUR", brand="TestBrand-DIFF", model="Galaxy S26 Ultra",
-        source_url="https://merchant-diff.example/p/1",
+        source_url=f"https://{domain}/p/1",
     )
     offer_2 = RawOffer(
-        merchant_domain="merchant-diff.example", merchant_product_id="D-2",
-        title="Samsung Galaxy Watch 7", url="https://merchant-diff.example/p/2",
+        merchant_domain=domain, merchant_product_id="D-2",
+        title="Samsung Galaxy Watch 7", url=f"https://{domain}/p/2",
         price=Decimal("299.00"), currency="EUR", brand="TestBrand-DIFF", model="Galaxy Watch 7",
-        source_url="https://merchant-diff.example/p/2",
+        source_url=f"https://{domain}/p/2",
     )
 
     result_1 = storage.process_raw_offer(conn, merchant_id=merchant_id, raw=offer_1,
@@ -144,27 +148,29 @@ def test_different_brand_model_creates_separate_products(conn):
 
 def test_same_brand_model_conflicting_specs_flagged_for_review_not_auto_merged(conn):
     storage = OfferStorage(StorageConfig(dsn=DSN))
-    brand_id = _make_brand(conn, "TestBrand-REVIEW")
-    category_id = _make_category(conn, "TestCategory-REVIEW")
-    merchant_id = _make_merchant(conn, "merchant-review.example")
+    brand_name = f"TestBrand-REVIEW-{uuid.uuid4().hex[:8]}"
+    brand_id = _make_brand(conn, brand_name)
+    category_id = _make_category(conn, f"TestCategory-REVIEW-{uuid.uuid4().hex[:8]}")
+    domain = f"merchant-review-{uuid.uuid4().hex[:8]}.example"
+    merchant_id = _make_merchant(conn, domain)
 
     offer_1 = RawOffer(
-        merchant_domain="merchant-review.example", merchant_product_id="R-1",
-        title="TestBrand-REVIEW Widget X1", url="https://merchant-review.example/p/1",
-        price=Decimal("499.00"), currency="EUR", brand="TestBrand-REVIEW", model="Widget X1",
+        merchant_domain=domain, merchant_product_id="R-1",
+        title=f"{brand_name} Widget X1", url=f"https://{domain}/p/1",
+        price=Decimal("499.00"), currency="EUR", brand=brand_name, model="Widget X1",
         specifications=[RawSpecification(key="storage", value="128GB"),
                          RawSpecification(key="color", value="Black")],
-        source_url="https://merchant-review.example/p/1",
+        source_url=f"https://{domain}/p/1",
     )
     # same brand+model, but every comparable spec disagrees -> brand+model score
     # lands in the 70-89 "possible match" band, per score_brand_model_match
     offer_2 = RawOffer(
-        merchant_domain="merchant-review.example", merchant_product_id="R-2",
-        title="TestBrand-REVIEW Widget X1", url="https://merchant-review.example/p/2",
-        price=Decimal("479.00"), currency="EUR", brand="TestBrand-REVIEW", model="Widget X1",
+        merchant_domain=domain, merchant_product_id="R-2",
+        title=f"{brand_name} Widget X1", url=f"https://{domain}/p/2",
+        price=Decimal("479.00"), currency="EUR", brand=brand_name, model="Widget X1",
         specifications=[RawSpecification(key="storage", value="256GB"),
                          RawSpecification(key="color", value="Silver")],
-        source_url="https://merchant-review.example/p/2",
+        source_url=f"https://{domain}/p/2",
     )
 
     storage.process_raw_offer(conn, merchant_id=merchant_id, raw=offer_1,

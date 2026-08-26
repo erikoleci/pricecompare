@@ -69,17 +69,38 @@ no fake products/prices/reviews. See the original spec for full requirements.
       the possible-match band and is flagged for review rather than merged.
       **11/11 crawler tests passing** (7 unit + 4 integration).
 
+## Status: Phase 4 (price alerts) ✅
+
+- [x] `OfferStorage.check_and_trigger_alerts()` + wiring into
+      `upsert_offer_and_record_price()` — spec section 22 ("notify me when
+      below €X"). Checks the **best current price across all of a product's
+      merchants** (not just the offer that just changed) against each active,
+      not-yet-triggered `price_alerts` row; marks matches `triggered_at` +
+      `active=false` and returns them for a caller to hand off to a
+      notification channel. Actual email/push delivery isn't implemented —
+      no provider credentials exist yet — this only decides *which* alerts
+      fire.
+- [x] Deal score, price index, price-change %, and buying-recommendation
+      logic (`PriceAnalyticsService`, spec sections 10/12/18/26) was already
+      written and reviewed in Phase 1; still not compiled/run here since the
+      sandbox has no Maven Central access.
+- [x] 2 new tests: alert fires exactly once when price drops to/below
+      target and not before; an alert on one product is untouched by price
+      changes on a different product. **13/13 crawler tests passing**
+      (7 unit + 6 integration against live Postgres).
+- Not yet done from Phase 4: scheduled (cron-style) price-drop batch jobs —
+  the detection itself already runs inline on every price write, which
+  covers the same outcome for now; a separate scheduled sweep would only
+  matter once crawls aren't triggering it live.
+
 ## Not yet built (next phases, per spec section 37)
 
 - Rest of Phase 2: onboard 3–5 *real* merchants — each needs a manual
   robots.txt/ToS review recorded in `merchant_sources` before
   `is_supported` is set to `true`, then Playwright-based live fetching
   wired to the connector pattern already proven above
-- Phase 4: scheduled price-drop detection jobs (the detection logic itself
-  is done and tested), deal score persisted per product, price alert
-  notifications (section 22)
 - Phase 5: search (Postgres FTS → OpenSearch later), dynamic filters, `/compare`
-- Phase 6: reviews pipeline, price alerts + notifications
+- Phase 6: reviews pipeline
 - Phase 7: admin dashboard, crawler monitoring UI, SEO pages
 
 ## Local setup
