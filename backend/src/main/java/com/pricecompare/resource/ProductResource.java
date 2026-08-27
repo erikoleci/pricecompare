@@ -1,15 +1,21 @@
 package com.pricecompare.resource;
 
+import com.pricecompare.dto.CompareProductDto;
 import com.pricecompare.dto.OfferDto;
 import com.pricecompare.entity.Offer;
 import com.pricecompare.entity.PriceHistory;
 import com.pricecompare.entity.Product;
+import com.pricecompare.entity.ProductSpecification;
+import com.pricecompare.entity.ReviewSummary;
 import com.pricecompare.service.PriceAnalyticsService;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
+import java.math.BigDecimal;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -25,10 +31,20 @@ public class ProductResource {
                                @QueryParam("brand") String brandSlug,
                                @QueryParam("page") @DefaultValue("0") int page,
                                @QueryParam("size") @DefaultValue("24") int size) {
-        var query = Product.find("status = 'ACTIVE'");
-        return query.page(page, size).list();
-        // NOTE: category/brand filtering + dynamic per-category filters (spec section 24)
-        // are added once the search module (Phase 5) is in place.
+        StringBuilder query = new StringBuilder("status = 'ACTIVE'");
+        List<Object> params = new java.util.ArrayList<>();
+        if (categorySlug != null && !categorySlug.isBlank()) {
+            query.append(" and category.slug = ?").append(params.size() + 1);
+            params.add(categorySlug);
+        }
+        if (brandSlug != null && !brandSlug.isBlank()) {
+            query.append(" and brand.slug = ?").append(params.size() + 1);
+            params.add(brandSlug);
+        }
+        return Product.find(query.toString(), params.toArray()).page(page, size).list();
+        // NOTE: dynamic per-category filter VALUES (spec section 24, e.g. "Storage: 256GB")
+        // still need a facet-count query once enough real offers exist to facet over;
+        // the filter *schema* itself is served by CategoryResource.
     }
 
     @GET
@@ -85,5 +101,47 @@ public class ProductResource {
                     p, java.time.Instant.now().minus(days, java.time.temporal.ChronoUnit.DAYS));
 
         return analytics.computeStats(history);
+    }
+
+    /**
+     * /compare (spec section 14): 2-4 products side by side. Pulls current/lowest/
+     * average price from price history + live offers, aggregate rating from
+     * review_summary (never fabricated - blank when no reviews exist yet, per
+     * section 40), and every spec key present on ANY of the compared products so
+     * the frontend can render one aligned table and highlight differences.
+     */
+    @GET
+    @Path("/compare")
+    public List<CompareProductDto> compare(@QueryParam("ids") List<UUID> ids) {
+        if (ids == null || ids.size() < 2 || ids.size() > 4) {
+            throw new BadRequestException("Provide 2-4 product ids to compare (spec section 14)");
+        }
+
+        return ids.stream().map(id -> {
+            Product p = Product.findById(id);
+            if (p == null) throw new NotFoundException("Product not found: " + id);
+
+            List<Offer> liveOffers = Offer.list("product = ?1 and availability != 'OUT_OF_STOCK'", p);
+            BigDecimal currentPrice = liveOffers.stream().map(o -> o.totalPrice)
+                    .min(Comparator.naturalOrder()).orElse(null);
+            long merchantCount = liveOffers.stream().map(o -> o.merchant.id).distinct().count();
+
+            List<PriceHistory> allHistory = PriceHistory.list("product = ?1", p);
+            PriceAnalyticsService.PriceStats stats = analytics.computeStats(allHistory);
+
+            ReviewSummary summary = ReviewSummary.findById(id);
+            Double avgRating = summary != null && summary.averageRating != null
+                    ? summary.averageRating.doubleValue() : null;
+            Integer reviewCount = summary != null ? summary.reviewCount : null;
+
+            Map<String, String> specs = new LinkedHashMap<>();
+            List<ProductSpecification> specRows = ProductSpecification.list("product = ?1", p);
+            for (ProductSpecification s : specRows) {
+                specs.put(s.specKey, s.specUnit != null ? s.specValue + " " + s.specUnit : s.specValue);
+            }
+
+            return new CompareProductDto(p.id, p.title, p.brand != null ? p.brand.name : null,
+                    currentPrice, stats.lowest(), stats.average(), (int) merchantCount, avgRating, reviewCount, specs);
+        }).collect(Collectors.toList());
     }
 }

@@ -93,13 +93,41 @@ no fake products/prices/reviews. See the original spec for full requirements.
   covers the same outcome for now; a separate scheduled sweep would only
   matter once crawls aren't triggering it live.
 
+## Status: Phase 5 (search, filters, compare) ✅
+
+- [x] `db/003_search_and_filters.sql` — full-text search vector on
+      `products` (title + brand + model weighted highest, category +
+      spec values included so "oled" or "rtx 5070" match even though
+      they live in `product_specifications`), kept current by a trigger,
+      GIN-indexed. Typed `filter_schema` (multi_select/boolean/range) seeded
+      for smartphones/laptops/TVs/gaming per spec section 24's explicit list.
+      Verified directly against Postgres: FTS match on `"ps5 pro"`, trigram
+      fuzzy match on the typo `"plestation 5 pro"` (0.45 similarity), and
+      exact EAN lookup all returned the right product.
+- [x] `SearchResource` (`GET /api/search`) — priority order per spec
+      section 23: digit-only query → identifier (EAN/GTIN/MPN/SKU) lookup,
+      else full-text, else trigram fallback for typo tolerance. Raw JDBC
+      (not Panache) since `@@`/`similarity()` don't map cleanly to HQL.
+- [x] `CategoryResource` (`GET /api/categories`, `/api/categories/{slug}`)
+      — serves the filter schema so the frontend never hardcodes filters.
+- [x] `GET /api/products/compare?ids=...` (spec section 14) — 2-4 products,
+      current/lowest/average price, merchant count, rating (blank, never
+      fabricated, until real reviews exist), and every spec key present on
+      any compared product for one aligned table.
+- [x] `SearchView.vue` and `CompareView.vue` wired to these endpoints for
+      real (search-as-you-type add-to-compare, difference highlighting).
+      **Built clean with `vue-tsc -b && vite build` — zero type errors.**
+- Backend Java still isn't compiled here (sandbox has no Maven Central
+  access) — written and reviewed, but only the SQL it issues has been
+  proven against a live database, and only the frontend has been proven
+  to actually build.
+
 ## Not yet built (next phases, per spec section 37)
 
 - Rest of Phase 2: onboard 3–5 *real* merchants — each needs a manual
   robots.txt/ToS review recorded in `merchant_sources` before
   `is_supported` is set to `true`, then Playwright-based live fetching
   wired to the connector pattern already proven above
-- Phase 5: search (Postgres FTS → OpenSearch later), dynamic filters, `/compare`
 - Phase 6: reviews pipeline
 - Phase 7: admin dashboard, crawler monitoring UI, SEO pages
 
