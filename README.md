@@ -6,9 +6,12 @@ no fake products/prices/reviews. See the original spec for full requirements.
 ## Status: Phase 1 complete ✅
 
 - [x] Repository structure (`backend/`, `frontend/`, `crawler/`, `db/`, `infra/`)
-- [x] PostgreSQL schema — 22 tables, tested end-to-end (schema applies cleanly,
-      constraints verified: `price > 0`, `shipping_cost` stays `NULL` instead of
-      defaulting to free, append-only `price_history`)
+- [x] PostgreSQL schema — 21 tables (corrected from an earlier "22" typo in
+      this doc), verified end-to-end against a real, freshly-installed
+      Postgres 16 in a later session: all 6 migrations (`001`-`006`) apply
+      cleanly in order, `price > 0` rejects a negative-price insert,
+      `shipping_cost` stays `NULL` (not `0`) and `total_price` is computed
+      correctly when shipping is unknown, append-only `price_history`.
 - [x] Seed data for the 8 MVP categories + subcategories + brands
 - [x] Backend skeleton (Quarkus): `Merchant`, `Product`, `Offer`,
       `PriceHistory`, `ProductIdentifier`, `ProductSpecification`, `Brand`,
@@ -168,6 +171,56 @@ no fake products/prices/reviews. See the original spec for full requirements.
   fetches and honors robots.txt directly over the real network before any
   actual crawl request, independent of this chat session's tooling.
 
+## Status: Live verification session (Phase 1 re-check + Phase 6 reviews)
+
+A later session had a real Linux sandbox (not just chat tools) and used it to
+actually run things that earlier sessions could only write and describe:
+
+- [x] **Database (Phase 1) verified for real**: installed Postgres 16 via apt,
+      applied all 6 `db/*.sql` migrations in order against a live instance -
+      all apply cleanly, 21 tables (not 22 - that was a doc typo, now fixed
+      above). Directly tested the two constraints spec section 6 & 30 care
+      about most: an offer with `price = -5` is rejected by the
+      `offers_price_check` constraint; an offer with no known shipping cost
+      stores `shipping_cost = NULL` and `total_price = price` rather than
+      silently treating shipping as free.
+- [x] **Frontend (Phase 5) verified for real**: `npm install && npm run build`
+      completes cleanly, confirming the vue-tsc/vite build claim from Phase 5.
+- [ ] **Backend (Phase 1/4/5) still not compilable in a sandbox**: installed
+      JDK 21 + Maven and ran `mvn compile` against the real `pom.xml`. It
+      failed with a confirmed, explicit cause (not a guess): `repo.maven.apache.org`
+      responds `403` with header `x-deny-reason: host_not_allowed` - the
+      sandbox's network egress proxy blocks Maven Central by policy. This is a
+      sandbox/infra limitation, not a code problem, and not something to route
+      around (bypassing network egress rules is out of scope). Compiling the
+      backend needs to happen on a machine with real Maven Central access.
+- [x] **Deal Score / Price Index / Buying Recommendation formulas
+      (`PriceAnalyticsService.java`, sections 10/12/18/26) verified against
+      real inputs** without needing Quarkus/Maven: since that class only
+      imports plain `java.*` (no framework types), its formulas were copied
+      into a standalone scratch file, compiled with plain `javac`, and run
+      against 5 scenarios (deep discount, at-average price, well-above-average
+      price, no history yet, extreme inputs) - all 9 assertions passed,
+      including that a deal score is always clamped to 0-100 and that "no
+      history" never produces an overconfident recommendation. The scratch
+      file was for verification only and isn't part of the repo.
+- [x] **Reviews pipeline (sections 16-17) — previously entirely missing —
+      implemented and tested**: `OfferStorage.write_reviews()` persists only
+      reviews a connector actually scraped (never fabricates any), skips
+      exact duplicates so a re-crawl of the same review page doesn't
+      double-insert, and `refresh_review_summary()` recomputes
+      `review_summary` (average rating, count, rating distribution) purely
+      from what's stored in `reviews` - if a product has zero real reviews,
+      no summary row is created at all rather than showing a fake `0.0`.
+      Wired into `process_raw_offer()` so any connector that opts into
+      `extract_reviews()` gets this for free. 3 new tests
+      (`crawler/tests/test_reviews.py`), all passing against live Postgres.
+      **16/16 crawler tests passing** (13 previous + 3 new).
+- [x] `crawler/tools/merchant_audit.py` - read-only tool automating 14 of the
+      24 discovery-checklist points (robots.txt, sitemap, JSON-LD structured
+      data, per-field product detection) per merchant domain; never bypasses
+      robots.txt/CAPTCHA/login. See `crawler/tools/domains_pending.txt`.
+
 ## Not yet built (next phases, per spec section 37)
 
 - Live merchant connectors — blocked on the compliance review above, for
@@ -218,7 +271,7 @@ Runs at `http://localhost:5173`, proxies `/api` to the backend.
 cd crawler
 pip install -r requirements.txt beautifulsoup4 lxml "psycopg[binary]"
 playwright install chromium
-python -m pytest tests/ -v   # 8/8 passing, verified in this sandbox against a live Postgres 16
+python -m pytest tests/ -v   # 16/16 passing, verified in this sandbox against a live Postgres 16
 ```
 
 ## Architecture (spec section 36)
