@@ -122,12 +122,41 @@ no fake products/prices/reviews. See the original spec for full requirements.
   proven against a live database, and only the frontend has been proven
   to actually build.
 
+## Status: Phase 2 merchant registration (partial) — 15 Albanian merchants requested
+
+- [x] All 15 named merchants (Neptun, Globe, Megatek, Shpresa-Al, Ozone,
+      American Computers, PC Store Albania, ElektroMarket, Celular.al,
+      Gjirafa50, Xito Shop, BENALB Electronics, The Smartphone Shop, Aza
+      Electronics, GoTech) registered in `merchants` with
+      `status='UNSUPPORTED'` and `crawler_enabled=false`, per spec section 3
+      ("nese nje website nuk mund te crawl-ohet ne menyre te lejueshme,
+      sistemi duhet ta shenoje si unsupported"). Real domains confirmed for
+      5 (neptun.al, megateksa.com, celular.al, gjirafa50.com,
+      azaelectronics.com); the other 10 names are too generic to resolve
+      confidently and got an obvious placeholder domain instead of a guess.
+- [ ] **robots.txt/ToS review has NOT happened for any of them.** This
+      session's tools couldn't do it reliably: `web_fetch` here only allows
+      URLs that already appeared in a search result, and robots.txt files
+      are essentially never indexed by search engines, so the direct
+      compliance check spec section 3 requires isn't something this chat
+      session could complete. Separately, even a normally-fetchable product
+      page (tried against a real Neptun iPhone listing) came back as just
+      the site's nav menu — the actual price/spec panel is client-rendered
+      and wasn't captured by a static fetch. Live crawling is also not
+      possible from the code sandbox itself: its network allowlist only
+      covers dev infrastructure (github/npm/pypi), not any retail site.
+      **None of this is a compliance judgment call — it's a tooling gap.**
+      Flipping any merchant to `is_supported=true` needs an actual person
+      (or an agent with real, unrestricted browser access) to open
+      `/robots.txt` and the Terms of Service and record the result in
+      `merchant_sources`.
+- See `db/004_al_merchants_pending.sql` for the full list and domain notes.
+
 ## Not yet built (next phases, per spec section 37)
 
-- Rest of Phase 2: onboard 3–5 *real* merchants — each needs a manual
-  robots.txt/ToS review recorded in `merchant_sources` before
-  `is_supported` is set to `true`, then Playwright-based live fetching
-  wired to the connector pattern already proven above
+- Live merchant connectors — blocked on the compliance review above, for
+  whichever 3–5 of the 15 get prioritized once real domains + robots.txt
+  are confirmed
 - Phase 6: reviews pipeline
 - Phase 7: admin dashboard, crawler monitoring UI, SEO pages
 
