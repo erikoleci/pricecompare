@@ -151,6 +151,22 @@ no fake products/prices/reviews. See the original spec for full requirements.
       `/robots.txt` and the Terms of Service and record the result in
       `merchant_sources`.
 - See `db/004_al_merchants_pending.sql` for the full list and domain notes.
+- `db/005_al_merchants_verified.sql` layers in **live findings** from a session
+  with real web access: corrected `shpresa.al`'s real domain (was previously
+  an unresolved guess), confirmed `azaelectronics.com` (OpenCart) and
+  `globe.al` (real storefront, but a JS SPA - needs the Playwright connector
+  to inspect), flagged `ozone.al` as actively bot-blocking fetch requests,
+  and removed `GoTech` from the catalog entirely (it's an IT-consulting blog,
+  not an electronics retailer). `neptun.al`, `megateksa.com`, `celular.al`,
+  and `gjirafa50.com` are still unverified - not because they're inaccessible,
+  but because they arrived concatenated without separators in one chat
+  message, which this session's fetch tool couldn't split into individual
+  URLs. **robots.txt itself was not readable by this chat session's tools for
+  any merchant** (small regional sites' robots.txt never surfaces in search
+  results, and the fetch tool only allows URLs it has already seen). This
+  does **not** weaken enforcement at crawl time: `crawler/core/compliance.py`
+  fetches and honors robots.txt directly over the real network before any
+  actual crawl request, independent of this chat session's tooling.
 
 ## Not yet built (next phases, per spec section 37)
 
