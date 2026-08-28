@@ -18,6 +18,19 @@
 -- these must be corrected to the real domain before is_supported can ever
 -- be considered, and the placeholder makes that obvious to anyone browsing
 -- the merchants table.
+--
+-- `name` isn't unique by default (only `domain` is) - add that constraint
+-- here, before the insert below relies on it for ON CONFLICT (name), since
+-- later migrations correct placeholder domains to real ones and a merchant
+-- re-seeded here must still be recognized as "the same merchant" by name,
+-- not by a domain that's since changed.
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_merchants_name') THEN
+        ALTER TABLE merchants ADD CONSTRAINT uq_merchants_name UNIQUE (name);
+    END IF;
+END $$;
+
 INSERT INTO merchants (name, domain, country, currency, status, crawler_enabled) VALUES
 ('Neptun',               'neptun.al',                      'AL', 'ALL', 'UNSUPPORTED', false),
 ('Globe',                'globe.pending-review.invalid',    'AL', 'ALL', 'UNSUPPORTED', false),
@@ -34,7 +47,7 @@ INSERT INTO merchants (name, domain, country, currency, status, crawler_enabled)
 ('The Smartphone Shop',  'the-smartphone-shop.pending-review.invalid', 'AL', 'ALL', 'UNSUPPORTED', false),
 ('Aza Electronics',      'azaelectronics.com',              'AL', 'ALL', 'UNSUPPORTED', false),
 ('GoTech',               'gotech.pending-review.invalid',   'AL', 'ALL', 'UNSUPPORTED', false)
-ON CONFLICT DO NOTHING;
+ON CONFLICT (name) DO NOTHING;
 
 -- Domain notes (not columns on merchants - just for whoever reviews this
 -- migration): "Globe", "Ozone", "GoTech", "American Computers", "PC Store

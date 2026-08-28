@@ -124,39 +124,46 @@ no fake products/prices/reviews. See the original spec for full requirements.
 
 ## Status: Phase 2 merchant registration (partial) — 15 Albanian merchants requested
 
-- [x] All 15 named merchants (Neptun, Globe, Megatek, Shpresa-Al, Ozone,
-      American Computers, PC Store Albania, ElektroMarket, Celular.al,
-      Gjirafa50, Xito Shop, BENALB Electronics, The Smartphone Shop, Aza
-      Electronics, GoTech) registered in `merchants` with
-      `status='UNSUPPORTED'` and `crawler_enabled=false`, per spec section 3
-      ("nese nje website nuk mund te crawl-ohet ne menyre te lejueshme,
-      sistemi duhet ta shenoje si unsupported"). Real domains confirmed for
-      5 (neptun.al, megateksa.com, celular.al, gjirafa50.com,
-      azaelectronics.com); the other 10 names are too generic to resolve
-      confidently and got an obvious placeholder domain instead of a guess.
-- [ ] **robots.txt/ToS review has NOT happened for any of them.** This
-      session's tools couldn't do it reliably: `web_fetch` here only allows
-      URLs that already appeared in a search result, and robots.txt files
-      are essentially never indexed by search engines, so the direct
-      compliance check spec section 3 requires isn't something this chat
-      session could complete. Separately, even a normally-fetchable product
-      page (tried against a real Neptun iPhone listing) came back as just
-      the site's nav menu — the actual price/spec panel is client-rendered
-      and wasn't captured by a static fetch. Live crawling is also not
-      possible from the code sandbox itself: its network allowlist only
-      covers dev infrastructure (github/npm/pypi), not any retail site.
-      **None of this is a compliance judgment call — it's a tooling gap.**
-      Flipping any merchant to `is_supported=true` needs an actual person
-      (or an agent with real, unrestricted browser access) to open
-      `/robots.txt` and the Terms of Service and record the result in
-      `merchant_sources`.
-- See `db/004_al_merchants_pending.sql` for the full list and domain notes.
+- [x] All 15 named merchants registered in `merchants` with
+      `status='UNSUPPORTED'`, `crawler_enabled=false` (spec section 3). Real
+      domains now confirmed for 9: neptun.al, megateksa.com, celular.al,
+      gjirafa50.com, azaelectronics.com, shpresa.al, globe.al, ozone.al,
+      gotech.al. The other 6 names (Globe *was* ambiguous until the user
+      gave the URL directly; still open: American Computers, PC Store
+      Albania, ElektroMarket, Xito Shop, BENALB Electronics, The Smartphone
+      Shop) have an obvious placeholder domain until confirmed.
+- [x] For the 4 the user linked directly, fetching each (real technical
+      signal, not a compliance review) found: **shpresa.al** and
+      **gotech.al** are ordinary server-rendered WooCommerce-style shops —
+      straightforward to parse once approved; **globe.al** is a JS
+      single-page app, so even an approved crawl needs Playwright rendering,
+      not a plain HTTP GET; **ozone.al** actively refused a plain,
+      non-adversarial fetch with its own bot detection — flagged as a
+      caution per spec section 3 (never bypass anti-bot measures), not
+      attempted further.
+- [x] Found and fixed two data-integrity bugs while testing these
+      migrations: `merchant_sources` had no uniqueness constraint at all
+      (silently duplicated rows on re-run), and `merchants` was only unique
+      on `domain`, which broke once a placeholder domain got corrected to a
+      real one. Both fixed in `db/006_merchant_sources_uniqueness_fix.sql`;
+      the whole `003`→`006` chain was re-run twice from a fresh database to
+      confirm it's now genuinely idempotent.
+- [ ] **robots.txt/ToS review still hasn't happened for any of them** — same
+      tooling gap as before (see prior note): nothing in this session can
+      reliably fetch a robots.txt that wasn't already surfaced by search,
+      and the crawler sandbox itself can't reach any retail domain at all.
+      `is_supported=true` still requires a human, or an agent with real,
+      unrestricted browser access (e.g. Claude Code), to open robots.txt and
+      the ToS and record the result in `merchant_sources`.
+- See `db/004_al_merchants_pending.sql` and `db/005_al_merchants_real_domains.sql`
+  for the full list, domain notes, and per-site technical observations.
 
 ## Not yet built (next phases, per spec section 37)
 
-- Live merchant connectors — blocked on the compliance review above, for
-  whichever 3–5 of the 15 get prioritized once real domains + robots.txt
-  are confirmed
+- Live merchant connectors — blocked on the compliance review above.
+  shpresa.al and gotech.al are the best-positioned candidates once
+  approved (simple server-rendered HTML); globe.al needs Playwright
+  rendering in addition; ozone.al should stay off the list
 - Phase 6: reviews pipeline
 - Phase 7: admin dashboard, crawler monitoring UI, SEO pages
 
