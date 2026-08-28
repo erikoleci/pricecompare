@@ -6,9 +6,12 @@ no fake products/prices/reviews. See the original spec for full requirements.
 ## Status: Phase 1 complete ✅
 
 - [x] Repository structure (`backend/`, `frontend/`, `crawler/`, `db/`, `infra/`)
-- [x] PostgreSQL schema — 22 tables, tested end-to-end (schema applies cleanly,
-      constraints verified: `price > 0`, `shipping_cost` stays `NULL` instead of
-      defaulting to free, append-only `price_history`)
+- [x] PostgreSQL schema — 21 tables (corrected from an earlier "22" typo in
+      this doc), verified end-to-end against a real, freshly-installed
+      Postgres 16 in a later session: all 6 migrations (`001`-`006`) apply
+      cleanly in order, `price > 0` rejects a negative-price insert,
+      `shipping_cost` stays `NULL` (not `0`) and `total_price` is computed
+      correctly when shipping is unknown, append-only `price_history`.
 - [x] Seed data for the 8 MVP categories + subcategories + brands
 - [x] Backend skeleton (Quarkus): `Merchant`, `Product`, `Offer`,
       `PriceHistory`, `ProductIdentifier`, `ProductSpecification`, `Brand`,
@@ -126,37 +129,97 @@ no fake products/prices/reviews. See the original spec for full requirements.
 
 - [x] All 15 named merchants registered in `merchants` with
       `status='UNSUPPORTED'`, `crawler_enabled=false` (spec section 3). Real
-      domains now confirmed for 9: neptun.al, megateksa.com, celular.al,
+      domains confirmed for 9: neptun.al, megateksa.com, celular.al,
       gjirafa50.com, azaelectronics.com, shpresa.al, globe.al, ozone.al,
-      gotech.al. The other 6 names (Globe *was* ambiguous until the user
-      gave the URL directly; still open: American Computers, PC Store
-      Albania, ElektroMarket, Xito Shop, BENALB Electronics, The Smartphone
-      Shop) have an obvious placeholder domain until confirmed.
-- [x] For the 4 the user linked directly, fetching each (real technical
-      signal, not a compliance review) found: **shpresa.al** and
-      **gotech.al** are ordinary server-rendered WooCommerce-style shops —
-      straightforward to parse once approved; **globe.al** is a JS
-      single-page app, so even an approved crawl needs Playwright rendering,
-      not a plain HTTP GET; **ozone.al** actively refused a plain,
-      non-adversarial fetch with its own bot detection — flagged as a
-      caution per spec section 3 (never bypass anti-bot measures), not
-      attempted further.
-- [x] Found and fixed two data-integrity bugs while testing these
-      migrations: `merchant_sources` had no uniqueness constraint at all
-      (silently duplicated rows on re-run), and `merchants` was only unique
-      on `domain`, which broke once a placeholder domain got corrected to a
-      real one. Both fixed in `db/006_merchant_sources_uniqueness_fix.sql`;
-      the whole `003`→`006` chain was re-run twice from a fresh database to
-      confirm it's now genuinely idempotent.
-- [ ] **robots.txt/ToS review still hasn't happened for any of them** — same
-      tooling gap as before (see prior note): nothing in this session can
-      reliably fetch a robots.txt that wasn't already surfaced by search,
-      and the crawler sandbox itself can't reach any retail domain at all.
-      `is_supported=true` still requires a human, or an agent with real,
-      unrestricted browser access (e.g. Claude Code), to open robots.txt and
+      gotech.al. The other 6 (American Computers, PC Store Albania,
+      ElektroMarket, Xito Shop, BENALB Electronics, The Smartphone Shop)
+      have an obvious placeholder domain until confirmed.
+- [x] Live findings across two independent sessions on the 4 the user
+      linked directly: **shpresa.al** and **gotech.al** are ordinary
+      server-rendered WooCommerce/Elementor shops with real ALL prices and
+      clean `/product/<slug>/` URLs — straightforward to parse once
+      approved; **globe.al** is a JS single-page app, so an approved crawl
+      needs Playwright rendering, not a plain HTTP GET; **ozone.al**
+      actively refused a plain, non-adversarial fetch with its own bot
+      detection — flagged as a caution per spec section 3 (never bypass
+      anti-bot measures), not attempted further.
+- **Correction**: an earlier pass on this file concluded `gotech.al` was an
+  IT-consulting blog with nothing to scrape, and removed it from the
+  catalog. That was wrong — a direct re-fetch of `https://gotech.al/`
+  confirms it's a real electronics retailer (GoTech Electronics, part of
+  DUKA Group: appliances/TV/phones/computers, real ALL prices, 27 physical
+  stores, WordPress/WooCommerce/Elementor). Restored in
+  `db/008_gotech_restore.sql` with a note explaining the discrepancy so it
+  isn't silently re-deleted by a future migration.
+- [x] Fixed two data-integrity bugs found while testing these migrations:
+      `merchant_sources` had no uniqueness constraint at all (silently
+      duplicated rows on re-run), and `merchants` was only unique on
+      `domain`, which broke once a placeholder domain got corrected to a
+      real one. Fixed in `db/006_merchant_sources_uniqueness_fix.sql`; the
+      full migration chain was re-run twice from a fresh database to
+      confirm it's genuinely idempotent.
+- [ ] **robots.txt/ToS itself still hasn't been read by a human for any of
+      them.** Every chat session's tools hit the same wall: `web_fetch`
+      only allows URLs already surfaced by search, and robots.txt is never
+      indexed by search engines for small regional sites. This does **not**
+      weaken enforcement at actual crawl time — `crawler/core/compliance.py`
+      fetches and honors robots.txt directly over the real network before
+      any real request, independent of any chat session's tooling.
+      `is_supported=true` still needs a human (or an agent with real,
+      unrestricted browser access, e.g. Claude Code) to read robots.txt and
       the ToS and record the result in `merchant_sources`.
-- See `db/004_al_merchants_pending.sql` and `db/005_al_merchants_real_domains.sql`
-  for the full list, domain notes, and per-site technical observations.
+- See `db/004_al_merchants_pending.sql`, `db/005_al_merchants_real_domains.sql`,
+  and `db/005_al_merchants_verified.sql` for the full history, domain notes,
+  and per-site technical observations across sessions.
+
+## Status: Live verification session (Phase 1 re-check + Phase 6 reviews)
+
+A later session had a real Linux sandbox (not just chat tools) and used it to
+actually run things that earlier sessions could only write and describe:
+
+- [x] **Database (Phase 1) verified for real**: installed Postgres 16 via apt,
+      applied all migrations in order against a live instance - all apply
+      cleanly. Directly tested the two constraints spec section 6 & 30 care
+      about most: an offer with `price = -5` is rejected by the
+      `offers_price_check` constraint; an offer with no known shipping cost
+      stores `shipping_cost = NULL` and `total_price = price` rather than
+      silently treating shipping as free.
+- [x] **Frontend (Phase 5) verified for real**: `npm install && npm run build`
+      completes cleanly, confirming the vue-tsc/vite build claim from Phase 5.
+- [ ] **Backend (Phase 1/4/5) still not compilable in a sandbox**: installed
+      JDK 21 + Maven and ran `mvn compile` against the real `pom.xml`. It
+      failed with a confirmed, explicit cause (not a guess): `repo.maven.apache.org`
+      responds `403` with header `x-deny-reason: host_not_allowed` - the
+      sandbox's network egress proxy blocks Maven Central by policy. This is a
+      sandbox/infra limitation, not a code problem, and not something to route
+      around (bypassing network egress rules is out of scope). Compiling the
+      backend needs to happen on a machine with real Maven Central access.
+- [x] **Deal Score / Price Index / Buying Recommendation formulas
+      (`PriceAnalyticsService.java`, sections 10/12/18/26) verified against
+      real inputs** without needing Quarkus/Maven: since that class only
+      imports plain `java.*` (no framework types), its formulas were copied
+      into a standalone scratch file, compiled with plain `javac`, and run
+      against 5 scenarios (deep discount, at-average price, well-above-average
+      price, no history yet, extreme inputs) - all 9 assertions passed,
+      including that a deal score is always clamped to 0-100 and that "no
+      history" never produces an overconfident recommendation. The scratch
+      file was for verification only and isn't part of the repo.
+- [x] **Reviews pipeline (sections 16-17) — previously entirely missing —
+      implemented and tested**: `OfferStorage.write_reviews()` persists only
+      reviews a connector actually scraped (never fabricates any), skips
+      exact duplicates so a re-crawl of the same review page doesn't
+      double-insert, and `refresh_review_summary()` recomputes
+      `review_summary` (average rating, count, rating distribution) purely
+      from what's stored in `reviews` - if a product has zero real reviews,
+      no summary row is created at all rather than showing a fake `0.0`.
+      Wired into `process_raw_offer()` so any connector that opts into
+      `extract_reviews()` gets this for free. 3 new tests
+      (`crawler/tests/test_reviews.py`), all passing against live Postgres.
+      **16/16 crawler tests passing** (13 previous + 3 new).
+- [x] `crawler/tools/merchant_audit.py` - read-only tool automating 14 of the
+      24 discovery-checklist points (robots.txt, sitemap, JSON-LD structured
+      data, per-field product detection) per merchant domain; never bypasses
+      robots.txt/CAPTCHA/login. See `crawler/tools/domains_pending.txt`.
 
 ## Not yet built (next phases, per spec section 37)
 
@@ -209,7 +272,7 @@ Runs at `http://localhost:5173`, proxies `/api` to the backend.
 cd crawler
 pip install -r requirements.txt beautifulsoup4 lxml "psycopg[binary]"
 playwright install chromium
-python -m pytest tests/ -v   # 8/8 passing, verified in this sandbox against a live Postgres 16
+python -m pytest tests/ -v   # 16/16 passing, verified in this sandbox against a live Postgres 16
 ```
 
 ## Architecture (spec section 36)

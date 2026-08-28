@@ -21,6 +21,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from decimal import Decimal
+from json import dumps as json_dumps
 from typing import Optional
 
 import psycopg
@@ -377,6 +378,13 @@ class OfferStorage:
             source_type=raw.source_type,
         )
 
+        # Only writes if the connector actually scraped reviews (section 16) -
+        # most connectors return an empty list here by default (see
+        # MerchantConnector.extract_reviews), so this is a no-op for them.
+        if raw.reviews:
+            self.write_reviews(conn, product_id=product_id, merchant_id=merchant_id,
+                                source=raw.merchant_domain, reviews=raw.reviews)
+
         if resolved.decision == "NEW_PRODUCT_PENDING_REVIEW" and resolved.candidate_product_id:
             conn.execute(
                 """INSERT INTO product_match_candidates
@@ -390,6 +398,71 @@ class OfferStorage:
         result["match_decision"] = resolved.decision
         result["match_confidence"] = resolved.confidence
         return result
+
+    # ------------------------------------------------------------------
+    # Reviews (spec sections 16-17). Only ever writes reviews a connector
+    # actually scraped from a source whose robots.txt/ToS permits review
+    # extraction (MerchantConnector.extract_reviews() is opt-in and
+    # defaults to returning nothing - see crawler/interfaces). This layer
+    # NEVER fabricates a review or a rating: if `raw.reviews` is empty,
+    # write_reviews() is simply a no-op and review_summary is left as-is.
+    # ------------------------------------------------------------------
+    def write_reviews(self, conn: psycopg.Connection, *, product_id: str, merchant_id: Optional[str],
+                       source: str, reviews: list) -> int:
+        """Writes real scraped reviews only. Returns how many rows were inserted
+        (duplicates - same author/rating/text/date for this product - are skipped,
+        since a re-crawl of the same page would otherwise re-insert them)."""
+        inserted = 0
+        for r in reviews:
+            existing = conn.execute(
+                """SELECT id FROM reviews
+                       WHERE product_id=%s AND source=%s
+                         AND author_name IS NOT DISTINCT FROM %s
+                         AND rating = %s
+                         AND review_date IS NOT DISTINCT FROM %s""",
+                (product_id, source, r.author_name, Decimal(str(r.rating)), r.review_date),
+            ).fetchone()
+            if existing:
+                continue
+            conn.execute(
+                """INSERT INTO reviews (product_id, merchant_id, source, author_name, rating,
+                       title, text, review_date, verified)
+                   VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (product_id, merchant_id, source, r.author_name, Decimal(str(r.rating)),
+                 r.title, r.text, r.review_date, r.verified),
+            )
+            inserted += 1
+        if inserted:
+            self.refresh_review_summary(conn, product_id=product_id)
+        return inserted
+
+    def refresh_review_summary(self, conn: psycopg.Connection, *, product_id: str) -> None:
+        """Recomputes review_summary purely from the reviews actually stored for this
+        product - an aggregate, never an invented number (section 17)."""
+        rows = conn.execute(
+            "SELECT rating FROM reviews WHERE product_id = %s", (product_id,)
+        ).fetchall()
+        if not rows:
+            conn.execute("DELETE FROM review_summary WHERE product_id = %s", (product_id,))
+            return
+
+        ratings = [float(r["rating"]) for r in rows]
+        avg = sum(ratings) / len(ratings)
+        distribution = {str(i): 0 for i in range(1, 6)}
+        for rating in ratings:
+            bucket = str(min(5, max(1, round(rating))))
+            distribution[bucket] += 1
+
+        conn.execute(
+            """INSERT INTO review_summary (product_id, average_rating, review_count, rating_distribution, updated_at)
+                   VALUES (%s, %s, %s, %s::jsonb, now())
+               ON CONFLICT (product_id) DO UPDATE SET
+                   average_rating = EXCLUDED.average_rating,
+                   review_count = EXCLUDED.review_count,
+                   rating_distribution = EXCLUDED.rating_distribution,
+                   updated_at = now()""",
+            (product_id, round(avg, 2), len(ratings), json_dumps(distribution)),
+        )
 
     def _record_price_drop(self, conn: psycopg.Connection, *, product_id: str, offer_id: str,
                             merchant_id: str, old_price: Decimal, new_price: Decimal) -> None:

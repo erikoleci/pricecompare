@@ -1,0 +1,13 @@
+# Domains with a confirmed real value in db/004_al_merchants_pending.sql.
+# Run: python -m crawler.tools.merchant_audit --domains-file crawler/tools/domains_pending.txt
+#
+# NOT included here: Globe, Ozone, GoTech, American Computers, PC Store Albania,
+# ElektroMarket, Xito Shop, BENALB Electronics, The Smartphone Shop, Shpresa-Al
+# - their real domain is still unconfirmed (see db/004_al_merchants_pending.sql).
+# Resolve those first, add them here, then re-run.
+
+neptun.al
+megateksa.com
+celular.al
+gjirafa50.com
+azaelectronics.com
