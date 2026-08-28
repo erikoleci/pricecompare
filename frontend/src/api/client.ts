@@ -95,3 +95,46 @@ export const categoriesApi = {
   list: () => apiClient.get<Category[]>('/categories'),
   get: (slug: string) => apiClient.get<Category>(`/categories/${slug}`)
 }
+
+export interface AdminMerchant {
+  merchantId: string
+  name: string
+  domain: string
+  status: string
+  crawlerEnabled: boolean
+  lastSuccessfulCrawl: string | null
+  sourceId: string | null
+  sourceType: string | null
+  baseUrl: string | null
+  robotsTxtUrl: string | null
+  robotsTxtCheckedAt: string | null
+  allowedByRobots: boolean | null
+  tosReviewed: boolean
+  tosNotes: string | null
+  isSupported: boolean
+}
+
+export interface ComplianceReviewRequest {
+  allowedByRobots?: boolean
+  tosReviewed?: boolean
+  tosNotes?: string
+  approve?: boolean
+}
+
+export interface AdminDashboard {
+  totalProducts: number
+  activeProducts: number
+  totalOffers: number
+  totalMerchants: number
+  activeMerchants: number
+  unsupportedMerchants: number
+  approvedSources: number
+  pendingComplianceReview: number
+}
+
+export const adminApi = {
+  dashboard: () => apiClient.get<AdminDashboard>('/admin/dashboard'),
+  merchants: () => apiClient.get<AdminMerchant[]>('/admin/merchants'),
+  updateCompliance: (merchantId: string, body: ComplianceReviewRequest) =>
+    apiClient.patch<AdminMerchant>(`/admin/merchants/${merchantId}/compliance`, body)
+}

@@ -47,7 +47,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { productsApi, type Product, type Offer, type PriceStats } from '@/api/client'
 
@@ -61,6 +61,50 @@ const priceIndexLabel = computed(() => {
   const idx = Math.round((priceStats.value.current / priceStats.value.average) * 100)
   return `${idx}`
 })
+
+// SEO structured data (spec section 35): Product + AggregateOffer + BreadcrumbList.
+// Injected into <head> on mount/update rather than baked into the template, since
+// this is a client-rendered SPA - a JS-executing crawler (e.g. Googlebot) picks
+// this up after render; a future SSR pass would move this server-side instead.
+let ldScript: HTMLScriptElement | null = null
+
+function updateStructuredData() {
+  if (!product.value) return
+  const offerPrices = offers.value.map(o => o.totalPrice)
+  const graph: Record<string, unknown>[] = [
+    {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.value.title,
+      description: product.value.description || undefined,
+      offers: offerPrices.length ? {
+        '@type': 'AggregateOffer',
+        priceCurrency: offers.value[0]?.currency || 'EUR',
+        lowPrice: Math.min(...offerPrices).toFixed(2),
+        highPrice: Math.max(...offerPrices).toFixed(2),
+        offerCount: offers.value.length
+      } : undefined
+    },
+    {
+      '@context': 'https://schema.org',
+      '@type': 'BreadcrumbList',
+      itemListElement: [
+        { '@type': 'ListItem', position: 1, name: 'Home', item: window.location.origin + '/' },
+        { '@type': 'ListItem', position: 2, name: product.value.title, item: window.location.href }
+      ]
+    }
+  ]
+
+  if (!ldScript) {
+    ldScript = document.createElement('script')
+    ldScript.type = 'application/ld+json'
+    document.head.appendChild(ldScript)
+  }
+  ldScript.textContent = JSON.stringify(graph)
+}
+
+watch([product, offers], updateStructuredData)
+onUnmounted(() => { ldScript?.remove() })
 
 onMounted(async () => {
   const id = route.params.id as string

@@ -217,14 +217,44 @@ actually run things that earlier sessions could only write and describe:
       data, per-field product detection) per merchant domain; never bypasses
       robots.txt/CAPTCHA/login. See `crawler/tools/domains_pending.txt`.
 
+## Status: Phase 7 (admin merchant management + SEO structured data)
+
+- [x] `MerchantSource` entity + `AdminResource` (`GET /api/admin/merchants`,
+      `PATCH /api/admin/merchants/{id}/compliance`, `GET /api/admin/dashboard`)
+      — a real UI for exactly the workflow this project's chat sessions have
+      been doing by hand with SQL migrations: record that a human actually
+      read robots.txt and the ToS, and only that (`approve: true`, which the
+      endpoint refuses unless `allowedByRobots=true` AND `tosReviewed=true`)
+      can flip `is_supported` to true. Spec section 3's gate is enforced in
+      code now, not just by convention.
+- [x] `AdminView.vue` — merchant compliance table (status, robots.txt/ToS
+      review state, notes, approve/revoke) wired to the endpoints above, plus
+      dashboard summary cards. The exact SQL each endpoint runs was verified
+      directly against Postgres before writing the Java (same reasoning as
+      SearchResource in Phase 5 - the DB layer is proven even though the
+      Java itself still can't compile in this sandbox).
+- [x] SEO structured data (spec section 35): `ProductView.vue` now injects
+      `Product` + `AggregateOffer` + `BreadcrumbList` JSON-LD into `<head>`
+      on mount (client-rendered SPA, so this is picked up by JS-executing
+      crawlers; a future SSR pass would move it server-side). Category/brand
+      landing pages aren't built yet.
+- **Frontend rebuilt clean** with the new `AdminView` route -
+  `vue-tsc -b && vite build`, zero errors. **16/16 crawler tests** still
+  passing (unaffected by this round - no crawler-layer changes).
+
 ## Not yet built (next phases, per spec section 37)
 
 - Live merchant connectors — blocked on the compliance review above.
-  shpresa.al and gotech.al are the best-positioned candidates once
-  approved (simple server-rendered HTML); globe.al needs Playwright
-  rendering in addition; ozone.al should stay off the list
-- Phase 6: reviews pipeline
-- Phase 7: admin dashboard, crawler monitoring UI, SEO pages
+  shpresa.al and celular.al are the best-positioned candidates once
+  approved (simple server-rendered HTML); globe.al/gjirafa50.com need
+  Playwright rendering in addition; megateksa.com and ozone.al should
+  stay off the list (robots.txt disallow / active bot-blocking)
+- Full section-28 admin browsing (products/offers/users/reviews/price
+  alerts/searches/clicks as separate admin list views) — only the
+  merchant-compliance and dashboard-summary parts got built this round,
+  since that's what's actually blocking real progress right now
+- SEO category/brand/deals landing pages (section 35) - only per-product
+  structured data (Product/AggregateOffer/BreadcrumbList) is done so far
 
 ## Local setup
 
