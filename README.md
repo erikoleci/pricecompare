@@ -325,3 +325,31 @@ SCRAPER / API / XML / CSV  →  RAW DATA  →  NORMALIZER  →  PRODUCT MATCHER
 The DB is never written to directly by a scraper — everything passes through
 the normalizer + matcher first, so non-scraper sources (API/XML/CSV feeds)
 can be added later without touching the storage layer.
+
+## Deployment
+
+See [`infra/DEPLOY.md`](infra/DEPLOY.md) for concrete steps (Docker Compose
+or Render). Short version of what changed to make this possible:
+
+- **Found and fixed a real gap**: `application.properties` had Flyway
+  auto-migration turned on, but Flyway only had `V1`/`V2` mirrored -
+  everything from Phase 5 onward (`db/003` through `db/007`) was missing
+  from `src/main/resources/db/migration`. A fresh production deploy would
+  have started with an incomplete schema and no merchant data. Mirrored as
+  `V3`-`V9` and verified the **exact Flyway-named chain** applies cleanly
+  on a totally fresh Postgres (`docker` isn't available in this sandbox to
+  run Flyway itself, but the SQL is identical either way).
+- `backend/Dockerfile` (Maven+JDK build → JRE runtime), `frontend/Dockerfile`
+  + `nginx.conf` (npm build → nginx, SPA routing, `/api` proxy),
+  `crawler/Dockerfile` (Playwright base image). **Not build-tested** - same
+  sandbox limitation as Maven (no Docker Hub access either) - but the
+  frontend's `npm run build` step they wrap already builds clean, and all
+  SQL they'd run already applies clean.
+- `application.properties` datasource/redis/port/CORS now read from env
+  vars (`DB_URL`, `DB_USER`, `DB_PASSWORD`, `REDIS_URL`, `PORT`,
+  `CORS_ORIGINS`) with the old hardcoded localhost values kept as
+  defaults, so local dev is unaffected.
+- `infra/docker-compose.yml` extended with `backend`/`frontend`/`crawler`
+  services. The crawler has **no default command** on purpose - there's
+  no scheduler entry point written yet, and nothing should crawl before
+  a merchant passes the compliance review in `/admin` anyway.

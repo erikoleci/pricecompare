@@ -7,11 +7,16 @@ services:
     environment:
       POSTGRES_DB: pricecompare
       POSTGRES_USER: pricecompare
-      POSTGRES_PASSWORD: pricecompare_dev_password
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-pricecompare_dev_password}
     ports:
       - "5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
+      # NOTE: Postgres only auto-runs *.sql from docker-entrypoint-initdb.d on
+      # first init of an empty volume, and only in filename order once, with
+      # no re-run/idempotency tracking. That's fine for a fresh dev volume,
+      # but the backend service (Flyway) is the real source of truth for
+      # schema state - see backend/src/main/resources/db/migration.
       - ../db:/docker-entrypoint-initdb.d
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U pricecompare"]
@@ -29,6 +34,52 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+
+  backend:
+    build:
+      context: ../backend
+    container_name: pricecompare-backend
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/pricecompare
+      DB_USER: pricecompare
+      DB_PASSWORD: ${DB_PASSWORD:-pricecompare_dev_password}
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      PORT: 8080
+    ports:
+      - "8080:8080"
+
+  frontend:
+    build:
+      context: ../frontend
+    container_name: pricecompare-frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+  # This container has no default long-running command on purpose: there is
+  # no production scheduler entry point yet (schedulers/priority_scheduler.py
+  # is a library module, not a runnable service - and there's nothing for it
+  # to schedule yet anyway, since no merchant has been approved via the
+  # admin UI per spec section 3). Use it for one-off runs instead, e.g.:
+  #   docker compose --profile crawler run crawler pytest
+  #   docker compose --profile crawler run crawler python3 -m tools.merchant_audit --domain shpresa.al
+  crawler:
+    build:
+      context: ../crawler
+    container_name: pricecompare-crawler
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PRICECOMPARE_DSN: "host=postgres dbname=pricecompare user=pricecompare password=${DB_PASSWORD:-pricecompare_dev_password}"
+    profiles: ["crawler"] # `docker compose --profile crawler run crawler <command>` to use it
 
   # Uncomment once Phase 5 (search) starts:
   # opensearch:
