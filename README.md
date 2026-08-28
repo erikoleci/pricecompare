@@ -241,6 +241,20 @@ actually run things that earlier sessions could only write and describe:
 - **Frontend rebuilt clean** with the new `AdminView` route -
   `vue-tsc -b && vite build`, zero errors. **16/16 crawler tests** still
   passing (unaffected by this round - no crawler-layer changes).
+- [x] **Real usage tracking wired in** (was a genuine gap, not deferred by
+      design): `SearchResource` now writes to `search_history` on every
+      search (query + result count), and a new `TrackingResource`
+      (`POST /api/track/click`) records `PRODUCT_VIEW` on page load and
+      `OFFER_CLICK` when a shopper clicks through to a merchant, both wired
+      into `ProductView.vue`. Both write-paths' exact SQL verified against
+      real Postgres before writing the Java.
+- [x] `AdminResource` extended with the rest of spec section 28's dashboard
+      sections - `/api/admin/{products,offers,reviews,price-drops,
+      price-alerts,searches,clicks}` - each verified with real inserted
+      test data against Postgres, then cleaned up. `AdminView.vue` now has
+      tabs for Reviews/Price Drops/Price Alerts/Searches/Clicks alongside
+      the merchant compliance table. Every row reflects only what actually
+      happened - nothing here is ever synthesized (spec section 40).
 
 ## Not yet built (next phases, per spec section 37)
 
@@ -249,12 +263,12 @@ actually run things that earlier sessions could only write and describe:
   approved (simple server-rendered HTML); globe.al/gjirafa50.com need
   Playwright rendering in addition; megateksa.com and ozone.al should
   stay off the list (robots.txt disallow / active bot-blocking)
-- Full section-28 admin browsing (products/offers/users/reviews/price
-  alerts/searches/clicks as separate admin list views) — only the
-  merchant-compliance and dashboard-summary parts got built this round,
-  since that's what's actually blocking real progress right now
 - SEO category/brand/deals landing pages (section 35) - only per-product
   structured data (Product/AggregateOffer/BreadcrumbList) is done so far
+- Price prediction (section 27, explicitly optional/experimental in spec)
+- Everything in section 28's admin dashboard is now real end-to-end
+  (backend + frontend + verified SQL) except user management (no auth
+  system exists yet to manage)
 
 ## Local setup
 

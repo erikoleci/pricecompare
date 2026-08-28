@@ -136,5 +136,17 @@ export const adminApi = {
   dashboard: () => apiClient.get<AdminDashboard>('/admin/dashboard'),
   merchants: () => apiClient.get<AdminMerchant[]>('/admin/merchants'),
   updateCompliance: (merchantId: string, body: ComplianceReviewRequest) =>
-    apiClient.patch<AdminMerchant>(`/admin/merchants/${merchantId}/compliance`, body)
+    apiClient.patch<AdminMerchant>(`/admin/merchants/${merchantId}/compliance`, body),
+  reviews: () => apiClient.get<Record<string, unknown>[]>('/admin/reviews'),
+  priceDrops: () => apiClient.get<Record<string, unknown>[]>('/admin/price-drops'),
+  priceAlerts: () => apiClient.get<Record<string, unknown>[]>('/admin/price-alerts'),
+  searches: () => apiClient.get<Record<string, unknown>[]>('/admin/searches'),
+  clicks: () => apiClient.get<Record<string, unknown>[]>('/admin/clicks')
+}
+
+export const trackingApi = {
+  click: (eventType: 'OFFER_CLICK' | 'PRODUCT_VIEW' | 'SEARCH_RESULT_CLICK', productId?: string, offerId?: string) =>
+    apiClient.post('/track/click', { eventType, productId, offerId }).catch(() => {
+      // tracking must never block the user's actual action (viewing a product, clicking an offer)
+    })
 }

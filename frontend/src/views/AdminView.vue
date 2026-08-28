@@ -19,7 +19,7 @@
 
     <v-progress-linear v-if="loading" indeterminate class="mb-4" />
 
-    <v-table v-else density="comfortable">
+    <v-table v-else density="comfortable" class="mb-8">
       <thead>
         <tr>
           <th>Merchant</th>
@@ -71,17 +71,69 @@
         </tr>
       </tbody>
     </v-table>
+
+    <h2 class="text-h6 font-weight-bold mb-2">Activity (spec section 28)</h2>
+    <v-tabs v-model="activityTab" class="mb-4">
+      <v-tab value="reviews">Reviews</v-tab>
+      <v-tab value="priceDrops">Price Drops</v-tab>
+      <v-tab value="priceAlerts">Price Alerts</v-tab>
+      <v-tab value="searches">Searches</v-tab>
+      <v-tab value="clicks">Clicks</v-tab>
+    </v-tabs>
+
+    <v-window v-model="activityTab">
+      <v-window-item value="reviews">
+        <EmptyOrTable :rows="activity.reviews" empty-text="No reviews yet - never fabricated (spec section 40)." />
+      </v-window-item>
+      <v-window-item value="priceDrops">
+        <EmptyOrTable :rows="activity.priceDrops" empty-text="No price drops detected yet." />
+      </v-window-item>
+      <v-window-item value="priceAlerts">
+        <EmptyOrTable :rows="activity.priceAlerts" empty-text="No price alerts set yet." />
+      </v-window-item>
+      <v-window-item value="searches">
+        <EmptyOrTable :rows="activity.searches" empty-text="No searches logged yet." />
+      </v-window-item>
+      <v-window-item value="clicks">
+        <EmptyOrTable :rows="activity.clicks" empty-text="No clicks tracked yet." />
+      </v-window-item>
+    </v-window>
   </v-container>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch, h } from 'vue'
 import { adminApi } from '@/api/client'
 import type { AdminMerchant, AdminDashboard } from '@/api/client'
 
 const merchants = ref<AdminMerchant[]>([])
 const dashboard = ref<AdminDashboard | null>(null)
 const loading = ref(false)
+const activityTab = ref('reviews')
+
+const activity = ref<Record<string, Record<string, unknown>[]>>({
+  reviews: [], priceDrops: [], priceAlerts: [], searches: [], clicks: []
+})
+
+// EmptyOrTable: tiny inline renderless-ish helper component so five near-identical
+// generic tables (different columns each) don't need five near-duplicate templates.
+const EmptyOrTable = {
+  props: { rows: { type: Array, required: true }, emptyText: { type: String, required: true } },
+  setup(props: { rows: Record<string, unknown>[]; emptyText: string }) {
+    return () => {
+      if (!props.rows.length) {
+        return h('p', { class: 'text-body-2 text-medium-emphasis pa-4' }, props.emptyText)
+      }
+      const columns = Object.keys(props.rows[0])
+      return h('table', { class: 'v-table__wrapper', style: 'width:100%; font-size: 0.875rem;' }, [
+        h('thead', h('tr', columns.map(c => h('th', { class: 'text-left pa-2' }, c)))),
+        h('tbody', props.rows.map((row, i) =>
+          h('tr', { key: i }, columns.map(c => h('td', { class: 'pa-2' }, String(row[c] ?? '—'))))
+        ))
+      ])
+    }
+  }
+}
 
 const summaryCards = computed(() => {
   if (!dashboard.value) return []
@@ -104,6 +156,19 @@ async function load() {
     loading.value = false
   }
 }
+
+async function loadActivityTab(tab: string) {
+  const loaders: Record<string, () => Promise<Record<string, unknown>[]>> = {
+    reviews: async () => (await adminApi.reviews()).data,
+    priceDrops: async () => (await adminApi.priceDrops()).data,
+    priceAlerts: async () => (await adminApi.priceAlerts()).data,
+    searches: async () => (await adminApi.searches()).data,
+    clicks: async () => (await adminApi.clicks()).data
+  }
+  if (loaders[tab]) activity.value[tab] = await loaders[tab]()
+}
+
+watch(activityTab, loadActivityTab, { immediate: true })
 
 async function approve(m: AdminMerchant) {
   const { data } = await adminApi.updateCompliance(m.merchantId, { approve: true })

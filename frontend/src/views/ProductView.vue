@@ -22,7 +22,8 @@
       <v-col cols="12" md="8">
         <h2 class="text-subtitle-1 font-weight-bold mb-2">Compare prices</h2>
         <v-list>
-          <v-list-item v-for="o in offers" :key="o.offerId" :href="o.url" target="_blank">
+          <v-list-item v-for="o in offers" :key="o.offerId" :href="o.url" target="_blank"
+                       @click="trackingApi.click('OFFER_CLICK', product?.id, o.offerId)">
             <template #prepend>
               <v-avatar size="28"><v-img :src="o.merchantLogoUrl" /></v-avatar>
             </template>
@@ -49,7 +50,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed, watch } from 'vue'
 import { useRoute } from 'vue-router'
-import { productsApi, type Product, type Offer, type PriceStats } from '@/api/client'
+import { productsApi, trackingApi, type Product, type Offer, type PriceStats } from '@/api/client'
 
 const route = useRoute()
 const product = ref<Product | null>(null)
@@ -116,5 +117,6 @@ onMounted(async () => {
   product.value = p.data
   offers.value = o.data
   priceStats.value = h.data
+  trackingApi.click('PRODUCT_VIEW', id)
 })
 </script>

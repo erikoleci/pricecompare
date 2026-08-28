@@ -10,6 +10,8 @@ import java.math.BigDecimal;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -47,24 +49,43 @@ public class SearchResource {
         }
 
         try (Connection conn = dataSource.getConnection()) {
+            List<SearchResultDto> results;
+
             // 1) identifier lookup - a query that's purely digits (with optional
             // dashes) is almost certainly an EAN/GTIN/SKU/MPN paste, not free text
             if (q.replace("-", "").chars().allMatch(Character::isDigit) && q.length() >= 6) {
-                List<SearchResultDto> byIdentifier = searchByIdentifier(conn, q);
-                if (!byIdentifier.isEmpty()) {
-                    return byIdentifier;
+                results = searchByIdentifier(conn, q);
+                if (!results.isEmpty()) {
+                    logSearch(conn, q, results.size());
+                    return results;
                 }
             }
 
             // 2) full-text search across title/brand/model/category/specs
-            List<SearchResultDto> ftsResults = searchFullText(conn, q, categorySlug, brandSlug, page, size);
-            if (!ftsResults.isEmpty()) {
-                return ftsResults;
+            results = searchFullText(conn, q, categorySlug, brandSlug, page, size);
+            if (!results.isEmpty()) {
+                logSearch(conn, q, results.size());
+                return results;
             }
 
             // 3) nothing matched - fall back to trigram similarity so a typo
             // ("plestation" instead of "playstation") still returns something
-            return searchFuzzy(conn, q, categorySlug, brandSlug, page, size);
+            results = searchFuzzy(conn, q, categorySlug, brandSlug, page, size);
+            logSearch(conn, q, results.size());
+            return results;
+        }
+    }
+
+    /** Section 23/28: every search gets logged (query + how many results it returned)
+     * so the admin "Searches" dashboard (section 28) reflects real usage - never
+     * fabricated. user_id stays NULL for now (no auth/session wiring yet). */
+    private void logSearch(Connection conn, String query, int resultCount) throws Exception {
+        try (PreparedStatement ps = conn.prepareStatement(
+                "INSERT INTO search_history (query, result_count, created_at) VALUES (?, ?, ?)")) {
+            ps.setString(1, query);
+            ps.setInt(2, resultCount);
+            ps.setTimestamp(3, Timestamp.from(Instant.now()));
+            ps.executeUpdate();
         }
     }
 
