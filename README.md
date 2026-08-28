@@ -143,14 +143,10 @@ no fake products/prices/reviews. See the original spec for full requirements.
       actively refused a plain, non-adversarial fetch with its own bot
       detection — flagged as a caution per spec section 3 (never bypass
       anti-bot measures), not attempted further.
-- **Correction**: an earlier pass on this file concluded `gotech.al` was an
-  IT-consulting blog with nothing to scrape, and removed it from the
-  catalog. That was wrong — a direct re-fetch of `https://gotech.al/`
-  confirms it's a real electronics retailer (GoTech Electronics, part of
-  DUKA Group: appliances/TV/phones/computers, real ALL prices, 27 physical
-  stores, WordPress/WooCommerce/Elementor). Restored in
-  `db/008_gotech_restore.sql` with a note explaining the discrepancy so it
-  isn't silently re-deleted by a future migration.
+- **Correction confirmed**: `db/007_gotech_restore.sql` re-verified `gotech.al`
+  live and restored it - real WordPress/WooCommerce/Elementor electronics
+  storefront (DUKA Group), 27 physical stores, real ALL prices, not an
+  IT-consulting blog as an earlier migration concluded.
 - [x] Fixed two data-integrity bugs found while testing these migrations:
       `merchant_sources` had no uniqueness constraint at all (silently
       duplicated rows on re-run), and `merchants` was only unique on
