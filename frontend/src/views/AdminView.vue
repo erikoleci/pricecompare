@@ -19,6 +19,10 @@
 
     <v-progress-linear v-if="loading" indeterminate class="mb-4" />
 
+    <v-alert v-else-if="loadError" type="error" variant="tonal" class="mb-4">
+      Failed to load admin data: {{ loadError }}
+    </v-alert>
+
     <v-table v-else density="comfortable" class="mb-8">
       <thead>
         <tr>
@@ -146,6 +150,7 @@ import type { AdminMerchant, AdminDashboard } from '@/api/client'
 const merchants = ref<AdminMerchant[]>([])
 const dashboard = ref<AdminDashboard | null>(null)
 const loading = ref(false)
+const loadError = ref<string | null>(null)
 const activityTab = ref('reviews')
 
 const activity = ref<Record<string, Record<string, unknown>[]>>({
@@ -185,10 +190,16 @@ const summaryCards = computed(() => {
 
 async function load() {
   loading.value = true
+  loadError.value = null
   try {
     const [merchantsRes, dashboardRes] = await Promise.all([adminApi.merchants(), adminApi.dashboard()])
     merchants.value = merchantsRes.data
     dashboard.value = dashboardRes.data
+  } catch (e: any) {
+    loadError.value = e?.response
+      ? `${e.response.status} from ${e.config?.url ?? 'API'}: ${JSON.stringify(e.response.data)}`
+      : (e?.message || 'Unknown error - see browser console/network tab')
+    console.error('Admin load failed:', e)
   } finally {
     loading.value = false
   }
