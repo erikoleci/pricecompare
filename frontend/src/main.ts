@@ -28,3 +28,10 @@ app.use(createPinia())
 app.use(router)
 app.use(vuetify)
 app.mount('#app')
+
+// Once a route has genuinely loaded successfully, clear the stale-chunk
+// reload guard from router/index.ts - so a later, unrelated chunk-load
+// failure (e.g. a flaky network blip weeks from now) can still trigger one
+// automatic recovery reload instead of being silently swallowed by a guard
+// left over from an earlier, already-resolved deploy.
+router.isReady().then(() => sessionStorage.removeItem('pricecompare:chunk-reload-attempted'))

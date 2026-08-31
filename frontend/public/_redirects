@@ -1,0 +1,12 @@
+# Vue Router history-mode fallback for Render Static Sites. Render supports
+# this file the same way Netlify does (checked from the publish directory).
+# This makes the rewrite rule version-controlled instead of a manual
+# dashboard setting that's easy to forget when recreating the service.
+#
+# IMPORTANT: this must NOT catch requests for files that actually exist
+# under /assets/ - Render (like Netlify) only falls through to this rule
+# when no real file matches the request path first, so a request for an
+# asset that genuinely exists on disk is served directly and never reaches
+# this rule. Only truly missing files (including stale-hash 404s) or
+# client-side routes (e.g. /products/abc) fall through to index.html.
+/*    /index.html   200

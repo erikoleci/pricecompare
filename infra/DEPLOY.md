@@ -92,3 +92,56 @@ root/Dockerfile path.
   public traffic.
 - No CI - `docker compose build` (or Render's build) is the only thing
   that will actually catch a Maven/npm compile error right now.
+
+## Fixing "Failed to fetch dynamically imported module" / 404 on old chunk hashes
+
+If you deployed and see console errors like:
+
+```
+GET https://<your-site>.onrender.com/assets/VCheckboxBtn-BsrGIdV-.js 404 (Not Found)
+TypeError: Failed to fetch dynamically imported module: .../SearchView-DB-LsWLY.js
+```
+
+This is **not a broken build** - `npm run build` produced a working
+`dist/` (verified: 16/16 crawler tests + a clean `vue-tsc -b && vite build`
+every time this repo's frontend has changed). The cause is caching:
+
+- Vite content-hashes every JS/CSS chunk filename. Any file whose content
+  changed gets a **new** filename on the next build (e.g.
+  `VCheckboxBtn-BwJzXNGk.js` this build vs. `VCheckboxBtn-BsrGIdV-.js` last
+  build).
+- `index.html` is what references those hashed filenames. If a browser (or
+  Render's CDN) has an `index.html` cached from *before* your latest
+  deploy, it still points at the *previous* build's filenames - which
+  genuinely no longer exist once the new build replaces them. That's the
+  literal 404 you're seeing, and it'll keep happening on every redeploy
+  until `index.html` itself stops being cached.
+
+**Fix (already in this repo as of the commit that added this section):**
+`frontend/public/_headers` sets `Cache-Control: no-cache` on `index.html`
+specifically (so it's always re-fetched fresh) while `/assets/*` gets a
+year-long `immutable` cache (safe, since a changed file always gets a new
+name). `frontend/public/_redirects` gives the SPA fallback rule the same
+treatment as a checked-in file instead of a dashboard-only setting. Both
+are copied into `dist/` automatically by `vite build` and Render reads them
+from the publish directory - **no dashboard configuration needed**, but if
+you already added a manual "Redirect/Rewrite" rule for `/* → /index.html`
+in the Render dashboard, that's harmless to leave in place alongside
+`_redirects`.
+
+**To apply this to your existing Render Static Site**, just redeploy after
+pulling this change (Manual Deploy → "Clear build cache & deploy" in the
+Render dashboard, so Render doesn't reuse a cached copy of the *old*
+`dist/` from before `_headers`/`_redirects` existed). After that redeploy,
+every future deploy should stop reproducing this error.
+
+There's also a small client-side safety net now (`router/index.ts` +
+`main.ts`): if a tab was already open right when a new deploy went live, it
+will hit this same stale-reference error once - the app now catches that
+specific error and does **one** automatic page reload to recover, instead
+of leaving the user on a broken white screen. This is a fallback for that
+narrow timing window, not a substitute for the cache-header fix above.
+
+If it's a Docker/nginx deployment (Option A) instead of a Static Site,
+`frontend/nginx.conf` got the equivalent fix directly (separate `location`
+blocks for `/index.html` vs `/assets/`) - just rebuild the image.
