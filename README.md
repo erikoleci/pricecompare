@@ -280,6 +280,43 @@ actually run things that earlier sessions could only write and describe:
       the merchant compliance table. Every row reflects only what actually
       happened - nothing here is ever synthesized (spec section 40).
 
+## Status: robots.txt review for 7 more merchants + Neptun goes live
+
+`V12__seven_merchants_robots_review.sql`: real robots.txt content the user
+fetched/pasted was reviewed for shpresa.al, celular.al, gjirafa50.com,
+globe.al, gotech.al, azaelectronics.com, ozone.al — same pattern as V10's
+Neptun review. All 7 got `allowed_by_robots=true` (each file's actual
+disallow list only blocks account/cart/checkout/admin/duplicate-filter-URL
+paths, never product or category pages), but **none were auto-approved** -
+`tos_reviewed` stays false for all of them until their ToS text specifically
+is read. Two items worth flagging:
+- **globe.al's robots.txt explicitly disallows "ClaudeBot" by name** (along
+  with Amazonbot, GPTBot, CCBot, and others) — recorded plainly in the
+  migration. This project's own connector uses its own honest User-Agent
+  string, never impersonating a named bot, so this doesn't block it, but
+  it's a directly relevant data point given the tooling used to build this
+  repo.
+- **ozone.al**: robots.txt itself technically permits crawling, but this is
+  recorded *alongside*, not instead of, the earlier finding that ozone.al's
+  server actively returns an HTTP-level bot-detection block against fetch
+  attempts — a permissive robots.txt doesn't authorize working around an
+  active technical block (spec section 3). Recommendation: leave unapproved
+  regardless of the robots.txt result, unless that block is independently
+  re-verified as gone.
+
+`V13__approve_neptun.sql`: **Neptun is now `is_supported=true`,
+`status='ACTIVE'`** — the first merchant to actually clear the full spec
+section 3 gate (both `allowed_by_robots` and `tos_reviewed` true, verified
+in V10). The migration re-checks that precondition itself
+(`RAISE EXCEPTION` if either is false) rather than trusting it blindly, and
+does exactly what `/admin`'s Approve button would have done — this was a
+direct workflow choice (approve without the manual dashboard click once the
+review itself is already done), not a relaxation of the compliance gate.
+Verified: full `V1`-`V13` chain applies clean on a freshly recreated
+Postgres 16, **23/23 crawler tests still passing** (7 new celular.al
+connector tests + 16 previous, unaffected — no crawler-layer changes this
+round).
+
 ## Phase 2: first real connector (celular.al) — extraction only, NOT live yet
 
 `crawler/merchants/celular_al/connector.py` extracts from schema.org
