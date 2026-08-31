@@ -54,23 +54,60 @@
           <td class="text-caption" style="max-width: 320px; white-space: normal;">{{ m.tosNotes || '—' }}</td>
           <td>
             <v-btn
-              v-if="!m.isSupported && m.allowedByRobots === true && m.tosReviewed"
-              size="small" color="success" variant="tonal"
-              @click="approve(m)"
+              size="small" variant="tonal"
+              :color="m.isSupported ? 'error' : 'primary'"
+              @click="openReview(m)"
             >
-              Approve
-            </v-btn>
-            <v-btn
-              v-else-if="m.isSupported"
-              size="small" color="error" variant="text"
-              @click="revoke(m)"
-            >
-              Revoke
+              {{ m.isSupported ? 'Revoke' : 'Review' }}
             </v-btn>
           </td>
         </tr>
       </tbody>
     </v-table>
+
+    <!-- Review dialog: this is the ONE place robots.txt/ToS get marked and a
+         merchant gets approved. Nothing here fakes a real review - typing in
+         this dialog is the human confirming what they actually read, same
+         as the SQL migrations this replaced (V10, V12). -->
+    <v-dialog v-model="reviewDialog" max-width="560">
+      <v-card v-if="reviewTarget">
+        <v-card-title>{{ reviewTarget.name }} — {{ reviewTarget.domain }}</v-card-title>
+        <v-card-text>
+          <p class="text-body-2 text-medium-emphasis mb-4">
+            Only check a box after you've actually opened and read that document for this merchant.
+            Spec section 3: approval needs both robots.txt allowed AND ToS reviewed.
+          </p>
+          <v-checkbox
+            v-model="reviewForm.allowedByRobots"
+            label="robots.txt allows crawling product/category pages"
+            hide-details class="mb-2"
+          />
+          <v-checkbox
+            v-model="reviewForm.tosReviewed"
+            label="I have read the Terms of Service"
+            hide-details class="mb-4"
+          />
+          <v-textarea
+            v-model="reviewForm.tosNotes"
+            label="Notes (what robots.txt/ToS actually say — kept as a permanent record)"
+            rows="4" auto-grow variant="outlined"
+          />
+          <v-alert v-if="reviewError" type="error" density="compact" class="mt-2">{{ reviewError }}</v-alert>
+        </v-card-text>
+        <v-card-actions>
+          <v-spacer />
+          <v-btn variant="text" @click="reviewDialog = false">Cancel</v-btn>
+          <v-btn variant="tonal" @click="saveReview(false)">Save notes only</v-btn>
+          <v-btn
+            color="success" variant="flat"
+            :disabled="!reviewForm.allowedByRobots || !reviewForm.tosReviewed"
+            @click="saveReview(true)"
+          >
+            Save &amp; Approve
+          </v-btn>
+        </v-card-actions>
+      </v-card>
+    </v-dialog>
 
     <h2 class="text-h6 font-weight-bold mb-2">Activity (spec section 28)</h2>
     <v-tabs v-model="activityTab" class="mb-4">
@@ -178,6 +215,51 @@ async function approve(m: AdminMerchant) {
 async function revoke(m: AdminMerchant) {
   const { data } = await adminApi.updateCompliance(m.merchantId, { approve: false })
   Object.assign(m, data)
+}
+
+// --- Review dialog: the actual fix for "buttons I can't click/see" — the
+// old template only rendered a button when tosReviewed was already true,
+// which for every merchant except Neptun meant no button at all. Now there
+// is always exactly one visible action per row.
+const reviewDialog = ref(false)
+const reviewTarget = ref<AdminMerchant | null>(null)
+const reviewError = ref('')
+const reviewForm = ref<{ allowedByRobots: boolean; tosReviewed: boolean; tosNotes: string }>({
+  allowedByRobots: false,
+  tosReviewed: false,
+  tosNotes: ''
+})
+
+function openReview(m: AdminMerchant) {
+  if (m.isSupported) {
+    revoke(m)
+    return
+  }
+  reviewTarget.value = m
+  reviewError.value = ''
+  reviewForm.value = {
+    allowedByRobots: m.allowedByRobots === true,
+    tosReviewed: !!m.tosReviewed,
+    tosNotes: m.tosNotes || ''
+  }
+  reviewDialog.value = true
+}
+
+async function saveReview(approveNow: boolean) {
+  if (!reviewTarget.value) return
+  reviewError.value = ''
+  try {
+    const { data } = await adminApi.updateCompliance(reviewTarget.value.merchantId, {
+      allowedByRobots: reviewForm.value.allowedByRobots,
+      tosReviewed: reviewForm.value.tosReviewed,
+      tosNotes: reviewForm.value.tosNotes,
+      approve: approveNow
+    })
+    Object.assign(reviewTarget.value, data)
+    reviewDialog.value = false
+  } catch (e: any) {
+    reviewError.value = e?.response?.data?.message || e?.message || 'Failed to save.'
+  }
 }
 
 onMounted(load)
