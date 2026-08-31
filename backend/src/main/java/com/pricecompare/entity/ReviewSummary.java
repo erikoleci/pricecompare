@@ -1,7 +1,10 @@
 package com.pricecompare.entity;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.hibernate.orm.panache.PanacheEntityBase;
 import jakarta.persistence.*;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -30,9 +33,11 @@ public class ReviewSummary extends PanacheEntityBase {
     @Column(name = "review_count", nullable = false)
     public int reviewCount = 0;
 
-    /** e.g. {"5": 72, "4": 18, "3": 6, "2": 2, "1": 2} - percentages, spec section 16 */
+    /** e.g. {"5": 72, "4": 18, "3": 6, "2": 2, "1": 2} - percentages, spec section 16.
+     * JsonNode (not String) for the same reason as Category.filterSchema - see there. */
+    @JdbcTypeCode(SqlTypes.JSON)
     @Column(name = "rating_distribution", columnDefinition = "jsonb")
-    public String ratingDistribution;
+    public JsonNode ratingDistribution;
 
     @Column(name = "updated_at", nullable = false)
     public Instant updatedAt = Instant.now();
