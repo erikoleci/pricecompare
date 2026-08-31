@@ -3,6 +3,30 @@
 Scraping-first, Idealo-inspired price comparison platform. Real data only —
 no fake products/prices/reviews. See the original spec for full requirements.
 
+## Try it as a project
+
+See [`infra/DEPLOY.md`](infra/DEPLOY.md) for concrete, tested-as-far-as-possible
+steps to deploy this (Docker Compose on a VPS, or Render). Quick local dev
+without Docker:
+
+```bash
+# 1. Database (needs Postgres 16 running locally, or via Docker)
+for f in backend/src/main/resources/db/migration/V*.sql; do
+  psql "postgresql://pricecompare:pricecompare_dev_password@localhost/pricecompare" -f "$f"
+done
+
+# 2. Backend (needs Maven Central access - see "Status" below for why that
+#    matters)
+cd backend && ./mvnw quarkus:dev
+
+# 3. Frontend
+cd frontend && npm install && npm run dev   # http://localhost:5173
+```
+
+The DB starts with zero products by design (no fake data, spec section 40) -
+real data only appears once a merchant passes the robots.txt/ToS review in
+`/admin` and its connector is actually run.
+
 ## Status: Phase 1 complete ✅
 
 - [x] Repository structure (`backend/`, `frontend/`, `crawler/`, `db/`, `infra/`)
@@ -255,6 +279,30 @@ actually run things that earlier sessions could only write and describe:
       tabs for Reviews/Price Drops/Price Alerts/Searches/Clicks alongside
       the merchant compliance table. Every row reflects only what actually
       happened - nothing here is ever synthesized (spec section 40).
+
+## Phase 2: first real connector (celular.al) — extraction only, NOT live yet
+
+`crawler/merchants/celular_al/connector.py` extracts from schema.org
+JSON-LD (Product/Offer) rather than hand-picked CSS selectors, because no
+session so far has had real fetch access to celular.al's actual HTML - see
+the module docstring for why guessing selectors against unseen markup would
+be worse than not writing them. 7/7 tests pass
+(`crawler/tests/test_celular_al_connector.py`) against a **synthetic**
+fixture built from the standard schema.org Product example - this proves
+the extraction *code* is correct, not that celular.al's real pages carry
+this exact markup.
+
+Two independent things still block `is_supported=true` (recorded in
+`V11__celular_al_connector_status.sql`, `merchant_sources.tos_notes` - same
+pattern as V10's Neptun compliance review):
+
+1. robots.txt/ToS have not actually been read for celular.al specifically
+   (`ComplianceGate` enforces this at runtime regardless of any DB flag) -
+   this still needs the same real-browser treatment Neptun got in V10, then
+   a human approving it in `/admin`.
+2. `discover_products()` (category/listing page enumeration) is still
+   `NotImplementedError` - the real pagination/listing URL pattern needs
+   confirming first, independent of (1).
 
 ## Not yet built (next phases, per spec section 37)
 

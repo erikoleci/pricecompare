@@ -1,9 +1,6 @@
-# Build the static SPA, then serve it with nginx. `npm run build` itself
-# (vue-tsc -b && vite build) WAS verified in the development sandbox - see
-# README Phase 5/7 notes. Only the Docker packaging around it is untested,
-# since Docker Hub isn't reachable from that sandbox either.
+# Multi-stage build: compile the Vue app, then serve the static output with nginx.
 
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /build
 COPY package.json package-lock.json ./
 RUN npm ci

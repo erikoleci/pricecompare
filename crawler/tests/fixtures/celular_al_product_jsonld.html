@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<!--
+  Synthetic fixture: standard schema.org Product JSON-LD, shaped the way a
+  typical SSR storefront (e.g. Astro/WooCommerce) emits it for SEO. This is
+  NOT captured from the real celular.al - no session has been able to fetch
+  the real page (see crawler/merchants/celular_al/connector.py docstring).
+  It exists only to prove the JSON-LD extraction logic itself is correct;
+  it says nothing about celular.al's actual markup, which must be confirmed
+  once someone has real access to the live site.
+-->
+<html lang="sq">
+<head>
+  <title>Samsung Galaxy S25 Ultra 256GB - celular.al</title>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "Product",
+    "name": "Samsung Galaxy S25 Ultra 256GB Titanium Black",
+    "sku": "SGS25U-256-BLK",
+    "gtin13": "8806095123456",
+    "brand": {"@type": "Brand", "name": "Samsung"},
+    "model": "SM-S938B",
+    "description": "Samsung Galaxy S25 Ultra me ekran 6.9 inch Dynamic AMOLED, 256GB memorje.",
+    "image": [
+      "https://celular.al/img/products/sgs25u-1.jpg",
+      "https://celular.al/img/products/sgs25u-2.jpg"
+    ],
+    "additionalProperty": [
+      {"@type": "PropertyValue", "name": "Display", "value": "6.9", "unitText": "inch"},
+      {"@type": "PropertyValue", "name": "RAM", "value": "12", "unitText": "GB"},
+      {"@type": "PropertyValue", "name": "Storage", "value": "256", "unitText": "GB"}
+    ],
+    "offers": {
+      "@type": "Offer",
+      "price": "1299.00",
+      "priceCurrency": "EUR",
+      "availability": "https://schema.org/InStock",
+      "priceSpecification": {"price": "1399.00", "priceType": "StrikethroughPrice"},
+      "shippingDetails": {
+        "@type": "OfferShippingDetails",
+        "shippingRate": {"@type": "MonetaryAmount", "value": "0.00", "currency": "EUR"}
+      }
+    },
+    "review": [
+      {
+        "@type": "Review",
+        "author": {"@type": "Person", "name": "Genti K."},
+        "reviewRating": {"@type": "Rating", "ratingValue": "5"},
+        "reviewBody": "Shume i mire, arriti shpejt.",
+        "datePublished": "2026-04-12"
+      },
+      {
+        "@type": "Review",
+        "author": {"@type": "Person", "name": "Blerta M."},
+        "reviewRating": {"@type": "Rating", "ratingValue": "4"},
+        "reviewBody": "Bateria mund te ishte me e mire.",
+        "datePublished": "2026-05-03"
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <h1>Samsung Galaxy S25 Ultra 256GB Titanium Black</h1>
+</body>
+</html>
