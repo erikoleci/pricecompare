@@ -117,23 +117,38 @@ every time this repo's frontend has changed). The cause is caching:
   literal 404 you're seeing, and it'll keep happening on every redeploy
   until `index.html` itself stops being cached.
 
-**Fix (already in this repo as of the commit that added this section):**
-`frontend/public/_headers` sets `Cache-Control: no-cache` on `index.html`
-specifically (so it's always re-fetched fresh) while `/assets/*` gets a
-year-long `immutable` cache (safe, since a changed file always gets a new
-name). `frontend/public/_redirects` gives the SPA fallback rule the same
-treatment as a checked-in file instead of a dashboard-only setting. Both
-are copied into `dist/` automatically by `vite build` and Render reads them
-from the publish directory - **no dashboard configuration needed**, but if
-you already added a manual "Redirect/Rewrite" rule for `/* → /index.html`
-in the Render dashboard, that's harmless to leave in place alongside
-`_redirects`.
+**Fix — CORRECTION: this originally claimed `_headers`/`_redirects` work
+automatically on Render the way they do on Netlify/Cloudflare Pages. That
+was wrong.** Render Static Sites do **not** read a `_headers` or
+`_redirects` file from the publish directory at all - both are
+Netlify/Cloudflare-specific conventions. Render's own docs confirm this:
+redirect/rewrite rules and custom headers for static sites are configured
+**only** via the Dashboard (see
+[render.com/docs/redirects-rewrites](https://render.com/docs/redirects-rewrites)
+and
+[render.com/docs/static-site-headers](https://render.com/docs/static-site-headers)
+- a `_headers`-file feature request for Render has been open, unimplemented,
+since 2019). `frontend/public/_headers` and `_redirects` are harmless to
+leave in the repo (Vite still copies them into `dist/`, and they're the
+correct mechanism for the Docker/nginx path - `nginx.conf` reads its own
+equivalent rules directly, not these files), but **on a Render Static
+Site specifically, configure both by hand**:
 
-**To apply this to your existing Render Static Site**, just redeploy after
-pulling this change (Manual Deploy → "Clear build cache & deploy" in the
-Render dashboard, so Render doesn't reuse a cached copy of the *old*
-`dist/` from before `_headers`/`_redirects` existed). After that redeploy,
-every future deploy should stop reproducing this error.
+- **Redirects/Rewrites tab** → add a rule: Source `/*`, Destination
+  `/index.html`, Action **Rewrite** (not Redirect - a Redirect would change
+  the URL in the browser, breaking Vue Router's history mode). This alone
+  fixes a 404 on any route besides `/` (e.g. `/admin`, `/search`,
+  `/products/<id>`).
+- **Headers tab** → add two rules:
+  - Path `/index.html`, Name `Cache-Control`, Value
+    `no-cache, no-store, must-revalidate`
+  - Path `/assets/*`, Name `Cache-Control`, Value
+    `public, max-age=31536000, immutable`
+
+  This is optional but recommended - it's what actually fixes the
+  stale-chunk-404-after-redeploy problem this section is about, on Render
+  specifically (the `_headers` file does not do this on Render, contrary to
+  what this section previously said).
 
 There's also a small client-side safety net now (`router/index.ts` +
 `main.ts`): if a tab was already open right when a new deploy went live, it
