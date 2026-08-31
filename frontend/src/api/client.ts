@@ -1,7 +1,16 @@
 import axios from 'axios'
 
+// Render Static Sites can't proxy /api/* to another service the way the
+// nginx.conf in this repo does for the Docker deployment path (see
+// infra/DEPLOY.md) - so on Render, the frontend has to call the backend's
+// full public URL directly. VITE_API_BASE_URL is a build-time env var (set
+// it in the Render Static Site's Environment tab, e.g.
+// https://pricecompare-jubj.onrender.com/api) - falls back to the relative
+// '/api' path for the Docker/nginx deployment, where the proxy handles it.
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || '/api'
+
 export const apiClient = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseUrl,
   timeout: 10000
 })
 
